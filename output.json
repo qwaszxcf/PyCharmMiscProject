@@ -1,0 +1,24 @@
+{
+  "rules": [
+    {
+      "condition": "请假 3 天以内",
+      "approver": "直属领导",
+      "remark": null
+    },
+    {
+      "condition": "超过 3 天",
+      "approver": "部门负责人",
+      "remark": null
+    },
+    {
+      "condition": "超过 7 天",
+      "approver": "HR",
+      "remark": "复核"
+    },
+    {
+      "condition": "超过 14 天",
+      "approver": "公司经理",
+      "remark": "发送邮件通知报备"
+    }
+  ]
+}
