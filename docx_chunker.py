@@ -1,4 +1,7 @@
+import json
+import os
 from typing import List, Dict
+from datetime import datetime
 
 from docx import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -158,23 +161,148 @@ def process_docx_for_rag(file_path: str, chunk_size: int = 500, chunk_overlap: i
     return chunked_docs
 
 
+def convert_docs_to_chunks(
+    docs: List[LCDocument],
+    doc_id_prefix: str = "doc"
+) -> List[Dict]:
+    """
+    将 LangChain Document 列表转换为标准 chunk 格式
+    
+    Args:
+        docs: LangChain Document 列表
+        doc_id_prefix: chunk_id 前缀
+        
+    Returns:
+        chunk 列表，格式:
+        [
+            {
+                "chunk_id": "doc_chunk_0001",
+                "text": "chunk 文本内容",
+                "metadata": {"title": "...", "level": 1, ...}
+            },
+            ...
+        ]
+    """
+    chunks = []
+    for i, doc in enumerate(docs):
+        chunk_id = f"{doc_id_prefix}_chunk_{i:04d}"
+        chunks.append({
+            "chunk_id": chunk_id,
+            "text": doc.page_content,
+            "metadata": dict(doc.metadata) if hasattr(doc, 'metadata') else {}
+        })
+    return chunks
+
+
+def save_chunks_to_json(
+    chunks: List[Dict],
+    output_path: str,
+    source_file: str = None
+) -> str:
+    """
+    将 chunk 列表保存为 JSON 文件（冻结 chunk 结构）
+    
+    Args:
+        chunks: chunk 列表
+        output_path: 输出文件路径
+        source_file: 源文档路径（可选，用于记录来源）
+        
+    Returns:
+        输出文件路径
+    """
+    output_data = {
+        "metadata": {
+            "source_file": source_file,
+            "total_chunks": len(chunks),
+            "created_at": datetime.now().isoformat()
+        },
+        "chunks": chunks
+    }
+    
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(output_data, f, ensure_ascii=False, indent=2)
+    
+    print(f"已保存 {len(chunks)} 个 chunk 到: {output_path}")
+    return output_path
+
+
+def load_chunks_from_json(input_path: str) -> List[Dict]:
+    """
+    从 JSON 文件加载 chunk 列表
+    
+    Args:
+        input_path: JSON 文件路径
+        
+    Returns:
+        chunk 列表
+    """
+    with open(input_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    
+    chunks = data.get("chunks", [])
+    print(f"已加载 {len(chunks)} 个 chunk 从: {input_path}")
+    return chunks
+
+
+def process_and_save_chunks(
+    file_path: str,
+    output_path: str = None,
+    doc_id_prefix: str = None,
+    chunk_size: int = 500,
+    chunk_overlap: int = 50
+) -> List[Dict]:
+    """
+    处理文档并保存 chunk 到 JSON 文件（一站式接口）
+    
+    Args:
+        file_path: docx 文件路径
+        output_path: 输出 JSON 文件路径（默认为 {文件名}_chunks.json）
+        doc_id_prefix: chunk_id 前缀（默认为文件名）
+        chunk_size: 每块最大字符数
+        chunk_overlap: 相邻块的重叠字符数
+        
+    Returns:
+        chunk 列表
+    """
+    # 确定输出路径和前缀
+    base_name = os.path.splitext(os.path.basename(file_path))[0]
+    if output_path is None:
+        output_path = f"{base_name}_chunks.json"
+    if doc_id_prefix is None:
+        doc_id_prefix = base_name
+    
+    # 1. 切分文档
+    docs = process_docx_for_rag(file_path, chunk_size, chunk_overlap)
+    
+    # 2. 转换为标准 chunk 格式
+    chunks = convert_docs_to_chunks(docs, doc_id_prefix)
+    
+    # 3. 保存到 JSON
+    save_chunks_to_json(chunks, output_path, source_file=file_path)
+    
+    return chunks
+
 
 if __name__ == "__main__":
-    # 处理 testdoc.docx 文件
+    # 处理 testdoc.docx 文件并保存 chunk JSON
     try:
-        chunks = process_docx_for_rag("testdoc.docx", chunk_size=500, chunk_overlap=50)
+        # 使用一站式接口：切分 + 转换 + 保存
+        chunks = process_and_save_chunks(
+            file_path="testdoc.docx",
+            output_path="testdoc_chunks.json",
+            chunk_size=500,
+            chunk_overlap=50
+        )
         
         print(f"\n共生成 {len(chunks)} 个 chunk")
-        # 示例：打印前 3 个 chunk 的详细信息
-        for i, c in enumerate(chunks):
-            print("=" * 40)
-            print(f"Chunk {i}")
-            print(f"  标题: {c.metadata.get('title')}")
-            print(f"  层级: {c.metadata.get('level')}")
-            print(f"  索引: {c.metadata.get('chunk_index')}")
-            print(f"  源文档: {c.metadata.get('source')}")
-            print(f"  内容预览: {c.page_content}...")
-            print(f"  字符数: {len(c.page_content)}")
+        print("\n" + "=" * 50)
+        print("Chunk 结构示例（前 3 个）:")
+        print("=" * 50)
+        
+        for chunk in chunks[:3]:
+            print(json.dumps(chunk, ensure_ascii=False, indent=2))
+            print("-" * 40)
+            
     except FileNotFoundError:
         print("错误: 找不到 testdoc.docx 文件，请确保该文件存在于当前目录中")
     except Exception as e:

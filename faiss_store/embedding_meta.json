@@ -1,0 +1,9 @@
+{
+  "model_name": "text-embedding-v3",
+  "dimension": 1024,
+  "normalize": true,
+  "index_type": "IndexFlatIP",
+  "total_vectors": 30,
+  "created_at": "2026-01-09T17:49:32.694298",
+  "api_base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+}
